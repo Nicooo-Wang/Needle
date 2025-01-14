@@ -2,7 +2,7 @@
 import os
 
 
-BACKEND = os.environ.get("NEEDLE_BACKEND", "np")
+BACKEND = os.environ.get("NEEDLE_BACKEND", "nd")
 
 
 if BACKEND == "nd":

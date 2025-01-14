@@ -10,18 +10,12 @@ from ..backend_selection import array_api, BACKEND
 class LogSoftmax(TensorOp):
     def compute(self, Z):
         ### BEGIN YOUR SOLUTION
-        max_z = Z.max(axis=-1, keepdims=True)
-        # Compute log-sum-exp
-        log_sum_exp_z = array_api.log(array_api.summation(array_api.exp(Z - max_z), axis=-1, keepdims=True)) + max_z
-        return Z - log_sum_exp_z
+        raise NotImplementedError()
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        Z = node.inputs[0]
-        log_softmax_Z = self.compute(Z)
-        softmax_Z = array_api.exp(log_softmax_Z)
-        return out_grad - softmax_Z * array_api.summation(out_grad, axis=-1, keepdims=True)
+        raise NotImplementedError()
         ### END YOUR SOLUTION
 
 
@@ -32,29 +26,30 @@ def logsoftmax(a):
 class LogSumExp(TensorOp):
     def __init__(self, axes: Optional[tuple] = None):
         if isinstance(axes, int):
-            axes=(axes,)
+            axes = (axes,)
         self.axes = axes
 
     def compute(self, Z):
         ### BEGIN YOUR SOLUTION
-        max_z_original = Z.max(axis=self.axes, keepdims=True) 
-        max_z_reduce = Z.max(axis=self.axes)
-        return array_api.log(array_api.summation(array_api.exp(Z - max_z_original.broadcast_to(Z.shape)), axis=self.axes)) + max_z_reduce 
+        if self.axes is None:
+            self.axes = tuple(range(len(Z.shape)))
+        max_z = Z.max(axis=self.axes, keepdims=True)
+        var = array_api.log(array_api.sum(array_api.exp(Z - max_z.broadcast_to(Z.shape)), axis=self.axes))
+        return var + max_z.reshape(var.shape)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
+        if self.axes is None:
+            self.axes = tuple(range(len(node.inputs[0].shape)))
         z = node.inputs[0]
-        max_z = Tensor(z.realize_cached_data().max(axis=self.axes, keepdims=True), device=z.device)
-        exp_z = exp(z - max_z.broadcast_to(z.shape))
-        sum_exp_z = summation(exp_z, axes=self.axes)
-        grad_sum_exp_z = out_grad / sum_exp_z
-        expand_shape = list(z.shape)
-        axes = range(len(expand_shape)) if self.axes is None else self.axes
-        for axis in axes:
-            expand_shape[axis] = 1
-        grad_exp_z = grad_sum_exp_z.reshape(expand_shape).broadcast_to(z.shape)
-        return grad_exp_z * exp_z
+        shape = [1 if i in self.axes else z.shape[i] for i in range(len(z.shape))]
+        gradient = exp(z - node.reshape(shape).broadcast_to(z.shape))
+        return out_grad.reshape(shape).broadcast_to(z.shape)*gradient
+        
+        
+        
+        
         ### END YOUR SOLUTION
 
 

@@ -1,7 +1,7 @@
 """Optimization module"""
 import needle as ndl
 import numpy as np
-from collections import defaultdict
+
 
 class Optimizer:
     def __init__(self, params):
@@ -20,32 +20,26 @@ class SGD(Optimizer):
         super().__init__(params)
         self.lr = lr
         self.momentum = momentum
-        self.u = defaultdict(float)
+        self.u = {}
         self.weight_decay = weight_decay
 
     def step(self):
-        # BEGIN YOUR SOLUTION
-        for w in self.params:
-            if self.weight_decay > 0:
-                grad = w.grad.data + self.weight_decay * w.data
-            else:
-                grad = w.grad.data
-            self.u[w] = self.momentum * self.u[w] + (1 - self.momentum) * grad
-            w.data = w.data - self.lr * self.u[w]
-        # END YOUR SOLUTION
+        ### BEGIN YOUR SOLUTION
+        for param in self.params:
+            if param.grad is not None:
+                if param not in self.u:
+                    self.u[param] = ndl.zeros_like(param.grad, requires_grad=False)
+                self.u[param] = self.momentum * self.u[param].data + (1 - self.momentum) * (param.grad.data + self.weight_decay * param.data)
+                param.data = param.data - self.lr * self.u[param]
+        ### END YOUR SOLUTION
 
     def clip_grad_norm(self, max_norm=0.25):
         """
         Clips gradient norm of parameters.
         """
-        # BEGIN YOUR SOLUTION
-        total_norm = np.linalg.norm(np.array(
-            [np.linalg.norm(p.grad.detach().numpy()).reshape((1,)) for p in self.params]))
-        clip_coef = max_norm / (total_norm + 1e-6)
-        clip_coef_clamped = min((np.asscalar(clip_coef), 1.0))
-        for p in self.params:
-            p.grad = p.grad.detach() * clip_coef_clamped
-        # END YOUR SOLUTION
+        ### BEGIN YOUR SOLUTION
+        raise NotImplementedError()
+        ### END YOUR SOLUTION
 
 
 class Adam(Optimizer):
@@ -66,21 +60,22 @@ class Adam(Optimizer):
         self.weight_decay = weight_decay
         self.t = 0
 
-        self.m = defaultdict(float)
-        self.v = defaultdict(float)
+        self.m = {}
+        self.v = {}
 
     def step(self):
-        # BEGIN YOUR SOLUTION
+        ### BEGIN YOUR SOLUTION
         self.t += 1
-        for w in self.params:
-            if self.weight_decay > 0:
-                grad = w.grad.data + self.weight_decay * w.data
-            else:
-                grad = w.grad.data
-            self.m[w] = self.beta1 * self.m[w] + (1 - self.beta1) * grad
-            self.v[w] = self.beta2 * self.v[w] + (1 - self.beta2) * (grad ** 2)
-            unbiased_m = self.m[w] / (1 - self.beta1 ** self.t)
-            unbiased_v = self.v[w] / (1 - self.beta2 ** self.t)
-            w.data = w.data - self.lr * unbiased_m / \
-                (unbiased_v**0.5 + self.eps)
-        # END YOUR SOLUTION
+        for param in self.params:
+            if param.grad is not None:
+                if param not in self.m.keys():
+                    self.m[param] = ndl.zeros_like(param.grad, requires_grad=False)
+                if param not in self.v.keys():
+                    self.v[param] = ndl.zeros_like(param.grad, requires_grad=False)
+                grad = param.grad.data + self.weight_decay * param.data
+                self.m[param] = self.beta1 * self.m[param] + (1 - self.beta1) * grad.data
+                self.v[param] = self.beta2 * self.v[param] + (1 - self.beta2) * grad.data * grad.data
+                u_hat = self.m[param].data / (1 - self.beta1 ** self.t)
+                v_hat = self.v[param].data / (1 - self.beta2 ** self.t)
+                param.data = param.data - self.lr * u_hat.data / (ndl.ops.power_scalar(v_hat.data, 0.5) + self.eps).data
+        ### END YOUR SOLUTION

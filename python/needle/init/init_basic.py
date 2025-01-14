@@ -5,10 +5,8 @@ import needle as ndl
 def rand(*shape, low=0.0, high=1.0, device=None, dtype="float32", requires_grad=False):
     """Generate random numbers uniform between low and high"""
     device = ndl.cpu() if device is None else device
-    print(dir(ndl))
     array = device.rand(*shape) * (high - low) + low
-    assert False
-    # return ndl.Tensor(array, device=device, dtype=dtype, requires_grad=requires_grad)
+    return ndl.Tensor(array, device=device, dtype=dtype, requires_grad=requires_grad)
 
 
 def randn(*shape, mean=0.0, std=1.0, device=None, dtype="float32", requires_grad=False):

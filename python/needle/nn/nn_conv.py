@@ -5,7 +5,7 @@ from needle.autograd import Tensor
 from needle import ops
 import needle.init as init
 import numpy as np
-from .nn_basic import Parameter, Module, BatchNorm2d, ReLU
+from .nn_basic import Parameter, Module
 
 
 class Conv(Module):
@@ -16,7 +16,6 @@ class Conv(Module):
     No grouped convolution or dilation
     Only supports square kernels
     """
-
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, bias=True, device=None, dtype="float32"):
         super().__init__()
         if isinstance(kernel_size, tuple):
@@ -28,39 +27,25 @@ class Conv(Module):
         self.kernel_size = kernel_size
         self.stride = stride
 
-        # BEGIN YOUR SOLUTION
-        self.padding = (kernel_size - 1) // 2
-        self.weight = Parameter(init.kaiming_uniform(in_channels*kernel_size*kernel_size,
-                                                     out_channels*kernel_size*kernel_size,
-                                                     shape=(
-                                                         kernel_size, kernel_size, in_channels, out_channels),
-                                                     device=device))
-        bias_bound = 1/(in_channels*kernel_size**2)**0.5
-        self.bias = Parameter(init.rand(
-            self.out_channels, low=-bias_bound, high=bias_bound, device=device)) if bias else None
-        # END YOUR SOLUTION
+        ### BEGIN YOUR SOLUTION
+        self.weight = Parameter(init.kaiming_uniform(self.in_channels, self.out_channels, shape=(kernel_size, kernel_size, in_channels, out_channels), device=device, dtype=dtype))
+        bias_bound = 1.0 / np.sqrt(in_channels * kernel_size * kernel_size)
+        self.bias = Parameter(init.rand(out_channels, low=-bias_bound, high=bias_bound, device=device, dtype=dtype)) if bias else None
+        self.padding = kernel_size // 2
+        ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
-        # BEGIN YOUR SOLUTION
-        nhwc_x = x.transpose((1, 2)).transpose((2, 3))
-        out = ops.conv(nhwc_x, self.weight, stride=self.stride,
-                       padding=self.padding)
-        if self.bias:
-            out += self.bias.reshape((1, 1, 1, self.out_channels)
-                                     ).broadcast_to(out.shape)
-        out = out.transpose((2, 3)).transpose((1, 2))
+        ### BEGIN YOUR SOLUTION
+        # convert NCHW to NHWC
+        x = ops.permute(x, [0, 2, 3, 1])
+        conv_x = ops.conv(x, self.weight, stride=self.stride, padding=self.padding)
+        if self.bias is not None:
+            broadcasted_bias = ops.broadcast_to(ops.reshape(self.bias, (1, 1, 1, self.out_channels)), conv_x.shape)
+            conv_x = conv_x + broadcasted_bias
+        out = ops.permute(conv_x, [0, 3, 1, 2])
         return out
-        # END YOUR SOLUTION
-
-class ConvBN(Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, device=None):
-        super().__init__()
-        self.conv = Conv(in_channels, out_channels, kernel_size, stride=stride, device=device)
-        self.bn = BatchNorm2d(out_channels, device=device)
-        self.relu = ReLU()
         
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.relu(x)
-        return x
+        
+        
+        
+        ### END YOUR SOLUTION

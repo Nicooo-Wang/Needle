@@ -1,3 +1,9 @@
+'''
+Author: zhouxin zhou.xin2000@outlook.com
+Date: 2024-09-05 21:34:32
+LastEditTime: 2024-09-09 15:46:22
+Software: VSCode
+'''
 import numpy as np
 
 class Transform:
@@ -20,7 +26,9 @@ class RandomFlipHorizontal(Transform):
         """
         flip_img = np.random.rand() < self.p
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if flip_img:
+            img = np.flip(img, axis=1)
+        return img
         ### END YOUR SOLUTION
 
 
@@ -38,5 +46,8 @@ class RandomCrop(Transform):
         """
         shift_x, shift_y = np.random.randint(low=-self.padding, high=self.padding+1, size=2)
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        img_size = img.shape
+        img = np.pad(img, ((self.padding, self.padding), (self.padding, self.padding), (0, 0)), 'constant')
+        img = img[self.padding + shift_x:self.padding + shift_x + img_size[0], self.padding + shift_y:self.padding + shift_y + img_size[1], :]
+        return img
         ### END YOUR SOLUTION
