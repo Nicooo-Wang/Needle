@@ -12,7 +12,7 @@ namespace needle
     {
 
 #define BASE_THREAD_NUM 256
-
+#define BASE_THREAD_NUM_2D 16
 #define TILE 4
         typedef float scalar_t;
         const size_t ELEM_SIZE = sizeof(scalar_t);
@@ -47,6 +47,19 @@ namespace needle
             size_t num_blocks = (size + BASE_THREAD_NUM - 1) / BASE_THREAD_NUM;
             dim.block = dim3(BASE_THREAD_NUM, 1, 1);
             dim.grid = dim3(num_blocks, 1, 1);
+            return dim;
+        }
+
+        CudaDims CudaTwoDim(size_t row, size_t col)
+        {
+            /**
+             * Utility function to get cuda dimensions for 2D call
+             */
+            CudaDims dim;
+            size_t num_blocks_x = (row + BASE_THREAD_NUM_2D - 1) / BASE_THREAD_NUM_2D;
+            size_t num_blocks_y = (col + BASE_THREAD_NUM_2D - 1) / BASE_THREAD_NUM_2D;
+            dim.block = dim3(BASE_THREAD_NUM_2D, BASE_THREAD_NUM_2D, 1);
+            dim.grid = dim3(num_blocks_x, num_blocks_y, 1);
             return dim;
         }
 
@@ -530,54 +543,91 @@ namespace needle
             EwiseTanhKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size);
         }
 
-#define TILE_SIZE 16
+        #define TILE_1D (BASE_THREAD_NUM_2D * TILE)
 
-        __global__ void MatmulKernel(const float* a,
-                                     const float* b,
-                                     float* out,
-                                     uint32_t M,
-                                     uint32_t N,
-                                     uint32_t P)
+        __global__ void MatMulSharedMemory2DTilingKernel(
+            const scalar_t *A, const scalar_t *B, scalar_t *out, size_t M, size_t N, size_t P)
         {
-            // Allocate shared memory for tiles
-            __shared__ float tile_a[TILE_SIZE][TILE_SIZE];
-            __shared__ float tile_b[TILE_SIZE][TILE_SIZE];
+            // 2d tiling wiki link: https://siboehm.com/articles/22/CUDA-MMM
+            __shared__ scalar_t sA[TILE_1D * TILE_1D], sB[TILE_1D * TILE_1D];
 
-            // Calculate global row and column indices
-            uint32_t row = blockIdx.y * TILE_SIZE + threadIdx.y;
-            uint32_t col = blockIdx.x * TILE_SIZE + threadIdx.x;
+            scalar_t C[TILE * TILE] = {0.0}; // init with zero
+            scalar_t a[TILE], b[TILE];
 
-            // Initialize the output element to 0
-            float value = 0;
+            size_t blkCol = blockIdx.x; // block col pos in out
+            size_t blkRow = blockIdx.y;
+            size_t trdCol = blockIdx.x * blockDim.x + threadIdx.x; // thread col pos in out
+            size_t trdRow = blockIdx.y * blockDim.y + threadIdx.y;
 
-            // Loop over tiles
-            for (int m = 0; m < (N + TILE_SIZE - 1) / TILE_SIZE; ++m)
-            {
-                // Load tiles into shared memory
-                if (row < M && m * TILE_SIZE + threadIdx.x < N)
-                    tile_a[threadIdx.y][threadIdx.x] = a[row * N + m * TILE_SIZE + threadIdx.x];
-                else
-                    tile_a[threadIdx.y][threadIdx.x] = 0.0;
-
-                if (col < P && m * TILE_SIZE + threadIdx.y < N)
-                    tile_b[threadIdx.y][threadIdx.x] = b[(m * TILE_SIZE + threadIdx.y) * P + col];
-                else
-                    tile_b[threadIdx.y][threadIdx.x] = 0.0;
-
-                // Synchronize to ensure tiles are loaded
+            // 1d loop
+            for (size_t ko = 0; ko < N; ko += TILE_1D) {
                 __syncthreads();
 
-                // Perform the multiplication for this tile
-                for (int e = 0; e < TILE_SIZE; ++e)
-                    value += tile_a[threadIdx.y][e] * tile_b[e][threadIdx.x];
+                size_t nthreads = blockDim.x * blockDim.y;
+                size_t ntasks = TILE_1D * TILE_1D / nthreads;
+                size_t tid = threadIdx.x * blockDim.y + threadIdx.y;
 
-                // Synchronize to ensure computation is done before loading new tiles
+                // full in sA sB
+                for (size_t j = 0; j < ntasks; ++j) {
+                    size_t x = (j + ntasks * tid) / TILE_1D;
+                    size_t y = (j + ntasks * tid) % TILE_1D;
+
+                    size_t row_a = blkCol * TILE_1D + x;
+                    size_t col_b = blkRow * TILE_1D + y;
+
+                    if (x < TILE_1D && row_a < M && (ko + y) < N)
+                        sA[x * TILE_1D + y] = A[row_a * N + ko + y];
+                    if (x < TILE_1D && (ko + x) < N && col_b < P)
+                        sB[x * TILE_1D + y] = B[(ko + x) * P + col_b];
+                }
+
                 __syncthreads();
+
+                for (size_t ki = 0; ki < TILE_1D; ++ki) {
+                    size_t k = ko + ki;
+
+                    if (k >= N)
+                        break;
+
+                    // fetch a, b from sA sB
+                    for (size_t i = 0; i < TILE; ++i) {
+                        size_t row_a = trdCol * TILE + i;
+                        size_t col_b = trdRow * TILE + i;
+                        size_t x = threadIdx.x * TILE + i;
+                        size_t y = threadIdx.y * TILE + i;
+
+                        if (row_a < M)
+                            a[i] = sA[x * TILE_1D + ki];
+                        if (col_b < P)
+                            b[i] = sB[ki * TILE_1D + y];
+                    }
+
+                    // full in sub task per thread
+                    for (size_t i = 0; i < TILE; ++i) {
+                        for (size_t j = 0; j < TILE; ++j) {
+                            size_t row_a = trdCol * TILE + i;
+                            size_t col_b = trdRow * TILE + j;
+
+                            if (row_a < M && col_b < P) {
+                                C[i * TILE + j] += a[i] * b[j];
+                            }
+                        }
+                    }
+                }
             }
 
-            // Write the result to the output matrix
-            if (row < M && col < P)
-                out[row * P + col] = value;
+            // write result back to out
+            for (size_t i = 0; i < TILE; ++i) {
+                for (size_t j = 0; j < TILE; ++j) {
+                    size_t row_a = trdCol * TILE + i;
+                    size_t col_b = trdRow * TILE + j;
+                    size_t idx = row_a * P + col_b;
+
+                    if (idx < M * P && row_a < M && col_b < P) {
+                        out[idx] = C[i * TILE + j];
+                    }
+                }
+            }
         }
 
         void Matmul(const CudaArray& a,
@@ -588,11 +638,10 @@ namespace needle
                     uint32_t P)
         {
             // Define the block and grid sizes
-            dim3 block(TILE_SIZE, TILE_SIZE, 1);
-            dim3 grid((P + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE, 1);
+            CudaDims dim = CudaTwoDim((M + TILE - 1) / TILE, (P + TILE - 1) / TILE);
 
             // Launch the kernel
-            MatmulKernel<<<grid, block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
+            MatMulSharedMemory2DTilingKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
         }
 
         ////////////////////////////////////////////////////////////////////////////////

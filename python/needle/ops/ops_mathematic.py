@@ -517,47 +517,80 @@ class Conv(TensorOp):
 
     def compute(self, A, B):
         ### BEGIN YOUR SOLUTION
-        assert len(A.shape) == 4, "The input tensor should be 4D"
-        assert len(B.shape) == 4, "The kernel tensor should be 4D"
+        assert len(A.shape) == 4
+        assert len(B.shape) == 4
         A = A.compact()
         B = B.compact()
+        A = A.pad(
+            ((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0))
+        ).compact()
+        kernel_height, kernel_width, in_channel, out_channel = B.shape
         batch_size, in_height, in_width, in_channel = A.shape
         bs, hs, ws, cs = A.strides
-        kernel_height, kernel_width, in_channel, out_channel = B.shape
-        
-        
-        
-        pad_A = A.pad(((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0))).compact()
-        batch_size, in_height, in_width, in_channel = pad_A.shape
-        bs, hs, ws, cs = pad_A.strides
-        receiptive_field_shape = (batch_size, (in_height - kernel_height) // self.stride + 1, (in_width - kernel_width) // self.stride + 1, kernel_height, kernel_width, in_channel)
+
+        # 通过im2col将conv转换成矩阵乘法，增加并行度
+        receiptive_field_shape = (
+            batch_size,
+            (in_height - kernel_height) // self.stride + 1,
+            (in_width - kernel_width) // self.stride + 1,
+            kernel_height,
+            kernel_width,
+            in_channel,
+        )
         receiptive_field_strides = (bs, hs * self.stride, ws * self.stride, hs, ws, cs)
-        receiptive_field = pad_A.as_strided(receiptive_field_shape, receiptive_field_strides).compact()
-        reveiptive_vector = receiptive_field.reshape((receiptive_field.size //(kernel_height * kernel_width * in_channel), kernel_height * kernel_width * in_channel)).compact()
-        kernel_vector = B.reshape((kernel_height * kernel_width * in_channel, out_channel)).compact()
+        # 计算前再compact，降低显存负载
+        receiptive_field = A.as_strided(
+            receiptive_field_shape, receiptive_field_strides
+        ).compact()
+        reveiptive_vector = receiptive_field.reshape(
+            (
+                receiptive_field.size // (kernel_height * kernel_width * in_channel),
+                kernel_height * kernel_width * in_channel,
+            )
+        ).compact()
+        kernel_vector = B.reshape(
+            (kernel_height * kernel_width * in_channel, out_channel)
+        ).compact()
         out = reveiptive_vector @ kernel_vector
-        out = out.reshape((batch_size, (in_height - kernel_height) // self.stride + 1, (in_width - kernel_width) // self.stride + 1, out_channel)).compact()
+        out = out.reshape(
+            (
+                batch_size,
+                (in_height - kernel_height) // self.stride + 1,
+                (in_width - kernel_width) // self.stride + 1,
+                out_channel,
+            )
+        ).compact()
         return out
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        X, W = node.inputs
-        s, _, _, _ = W.shape
-        
-        # 计算X_grad
-        W_flipped = flip(W, (0, 1))
-        W_flipped_permuted = transpose(W_flipped, (2, 3)) # transpose 只支持两个维度的交换
-        outgrad_dilated = dilate(out_grad, (1, 2), self.stride - 1)
-        X_grad = conv(outgrad_dilated, W_flipped_permuted, padding=s - 1 - self.padding)
-        
-        # 计算W_grad
-        # outgrad_dilated = dilate(out_grad, (1, 2), self.stride - 1)
-        outgrad_dilated_permuted = permute(outgrad_dilated, (1, 2, 0, 3))
-        X_permuted = permute(X, (3, 1, 2, 0))
-        W_grad = conv(X_permuted, outgrad_dilated_permuted, padding=self.padding)
-        W_grad = permute(W_grad, (1, 2, 0, 3))
-        return X_grad, W_grad
+        A, B = node.inputs
+        N, H, W, Cin = A.shape
+        K, _, _, Cout = B.shape
+
+        if self.stride > 1:
+            out_grad = dilate(out_grad, axes=(1, 2), dilation=self.stride - 1)
+        # 将卷积通过im2col写成矩阵形式，Wx，可以看到
+        # 对x求导结果等于 im2col(flip(W))
+        gradA = conv(
+            out_grad,  # (N, H', W', Cout)
+            flip(B, axes=(0, 1)).transpose((2, 3)),  # (K, K, Cout, Cin)
+            padding=K - 1 - self.padding,
+        )
+        # 对W求导结果等于 im2col(flip(x))，由于flip(x) == x，因此无需flip操作
+        gradB = (
+            conv(
+                A.transpose((0, 3)),  # (Cin, H, W, N)
+                out_grad.transpose((0, 1)).transpose(
+                    (1, 2)
+                ),  # (H+2P-K+1, W+2P-K+1, N, Cout)
+                padding=self.padding,
+            )
+            .transpose((0, 1))
+            .transpose((1, 2))
+        )
+        return gradA, gradB
         ### END YOUR SOLUTION
 
 
@@ -581,6 +614,6 @@ class Permute(TensorOp):
             index[self.axes[i]] = i
         return permute(out_grad, tuple(index))
         ### END YOUR SOLUTION
-        
+
 def permute(a, axes):
     return Permute(axes)(a)
