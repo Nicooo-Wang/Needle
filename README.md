@@ -1,5 +1,5 @@
 # Needle
-Needle is torch like educational Mechine Learning framework, The skeleton of this repository is from [CMU 10-414/714](https://dlsyscourse.org/) Deep Learing System course.
+Needle is torch like educational Mechine Learning framework, The skeleton of this repository is from [CMU 10-414/714](https://dlsyscourse.org/) Deep Learning System course.
 
 # Features
 - Automatic differentiation support
@@ -23,3 +23,9 @@ python download_dataset.py
 ```
 python sample.py
 ```
+
+# References
+1. [10-414/714: Deep Learning Systems ](https://dlsyscourse.org/)
+2. [The forum of 10-414/714 ](https://forum.dlsyscourse.org/)
+4. [知乎：PyTorch 源码解读之 torch.utils.data ](https://zhuanlan.zhihu.com/p/337850513)
+5. [https://github.com/wzbitl/needle](https://github.com/wzbitl/needle)
