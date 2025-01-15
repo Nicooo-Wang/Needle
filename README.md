@@ -1,5 +1,5 @@
 # Needle
-Needle is torch like educational Mechine Learning framework, The skeleton of this repository is from CMU 10-414/714 DLsys course.
+Needle is torch like educational Mechine Learning framework, The skeleton of this repository is from [CMU 10-414/714](https://dlsyscourse.org/) Deep Learing System course.
 
 # Features
 - Automatic differentiation
