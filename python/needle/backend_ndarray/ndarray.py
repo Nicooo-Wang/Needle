@@ -220,7 +220,6 @@ class NDArray:
 
     def as_strided(self, shape, strides):
         """Restride the matrix without copying memory."""
-        assert len(shape) == len(strides)
         return NDArray.make(
             shape, strides=strides, device=self.device, handle=self._handle
         )
@@ -300,10 +299,6 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        assert all(
-            new_shape[i] == self.shape[i] or self.shape[i] == 1
-            for i in range(len(self.shape))
-        ), "Invalid broadcast shape"
         new_strides = tuple(
             self.strides[i] if self.shape[i] == new_shape[i] else 0 for i in range(len(self.shape))
         )
