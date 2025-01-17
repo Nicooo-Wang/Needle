@@ -4,7 +4,7 @@ Needle is torch like educational Mechine Learning framework, The skeleton of thi
 # Features
 - Automatic differentiation support
 - Three backends ( CPU, CUDA, numpy )
-- common oprators (e.g. [Im2Col Conv](https://github.com/Nicooo-Wang/Needle/blob/343deaa73e357fcb9e1b23b4be3ba898f3c705ba/python/needle/ops/ops_mathematic.py#L513), [2D Tiling Matmal](https://github.com/Nicooo-Wang/Needle/blob/343deaa73e357fcb9e1b23b4be3ba898f3c705ba/src/ndarray_backend_cuda.cu#L548))
+- common oprators (e.g. [Im2Col Conv](https://github.com/Nicooo-Wang/Needle/blob/343deaa73e357fcb9e1b23b4be3ba898f3c705ba/python/needle/ops/ops_mathematic.py#L513), [2D Tiling Matmal (reached 70% cuBLAS performance)](https://github.com/Nicooo-Wang/Needle/blob/343deaa73e357fcb9e1b23b4be3ba898f3c705ba/src/ndarray_backend_cuda.cu#L548))
 - basic optimzers (e.g. adam, SGD)
 - common models (e.g. [ Resnet9 ](https://github.com/Nicooo-Wang/Needle/blob/343deaa73e357fcb9e1b23b4be3ba898f3c705ba/sample.py#L14))
 
