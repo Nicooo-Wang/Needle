@@ -23,7 +23,45 @@ python download_dataset.py
 ```
 python sample.py
 ```
-
+4. waiting for results
+```
+(infra) nico@Poor3070:~/Needle$ python sample.py 
+Using needle backend
+running on 0th batch
+running on 1th batch
+running on 2th batch
+running on 3th batch
+running on 4th batch
+running on 5th batch
+running on 6th batch
+running on 7th batch
+running on 8th batch
+running on 9th batch
+running on 10th batch
+running on 11th batch
+running on 12th batch
+running on 13th batch
+running on 14th batch
+running on 15th batch
+running on 16th batch
+running on 17th batch
+running on 18th batch
+running on 19th batch
+running on 20th batch
+running on 21th batch
+running on 22th batch
+...
+Epoch 0 | Train Accuracy: 0.3351582480818414 | Train Loss: 1.8470205068588257
+...
+Epoch 1 | Train Accuracy: 0.44824568414322247 | Train Loss: 1.5284370183944702
+...
+Epoch 2 | Train Accuracy: 0.4963235294117647 | Train Loss: 1.4007797241210938
+...
+Epoch 3 | Train Accuracy: 0.5313419117647058 | Train Loss: 1.305657148361206
+...
+Epoch 4 | Train Accuracy: 0.5585158248081841 | Train Loss: 1.228232502937317
+...
+```
 # References
 1. [10-414/714: Deep Learning Systems ](https://dlsyscourse.org/)
 2. [The forum of 10-414/714 ](https://forum.dlsyscourse.org/)
